@@ -29,11 +29,11 @@ ID	タスク	目的	成果物	依存	状態
 2. A方式ジェネレータ（注釈 → mcp.tools.json）
 
 ID	タスク	目的	成果物	依存	状態
-2-1	YAML抽出	/* @mcp ... */ 解析	src/generate.ts（fast-glob, js-yaml）	1-1	⬜
-2-2	仕様整合	name/schema必須、path既定	バリデーション関数、重複後勝ち	2-1	⬜
-2-3	3モード	注釈ゼロ時の分岐	既定=echo生成 / MCP_STRICT=1=エラー / MCP_MODE=empty=空	2-1	⬜
-2-4	Schema検証(任意)	早期不正検知	ajv によるスキーマ検証と警告	2-2	⬜
-2-5	CLI統合	mcp buildで自動生成	生成件数/モードのログ	1-1,2-1	⬜
+2-1	YAML抽出	/* @mcp ... */ 解析	src/generate.ts（fast-glob, js-yaml）	1-1	✅
+2-2	仕様整合	name/schema必須、path既定	バリデーション関数、重複後勝ち	2-1	✅
+2-3	3モード	注釈ゼロ時の分岐	既定=echo生成 / MCP_STRICT=1=エラー / MCP_MODE=empty=空	2-1	✅
+2-4	Schema検証(任意)	早期不正検知	ajv によるスキーマ検証と警告	2-2	✅
+2-5	CLI統合	mcp buildで自動生成	生成件数/モードのログ	1-1,2-1	✅
 
 
 ⸻

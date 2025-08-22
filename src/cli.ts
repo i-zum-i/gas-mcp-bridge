@@ -1,5 +1,7 @@
 import { Command } from 'commander';
+import fs from 'fs/promises';
 import { logger } from './logger';
+import { generate } from './generate';
 
 const readConfig = () => {
   const config = {
@@ -28,10 +30,20 @@ export const run = async (argv: string[]) => {
     program
       .command('build')
       .description('Build mcp.tools.json from GAS project annotations')
-      .action(() => {
+      .action(async () => {
         logger.info('Running build command...');
-        // TODO: Implement build logic from Task 2
-        logger.success('Build complete.');
+        try {
+          const toolsMap = await generate();
+          const toolsArray = Array.from(toolsMap.values());
+          const jsonContent = JSON.stringify({ tools: toolsArray }, null, 2);
+
+          await fs.writeFile('mcp.tools.json', jsonContent, 'utf-8');
+
+          logger.success(`Successfully generated mcp.tools.json with ${toolsArray.length} tools.`);
+        } catch (error) {
+          // The top-level try/catch in run() will handle logging and exit
+          throw error;
+        }
       });
 
     program
