@@ -2,7 +2,10 @@
   "name": "app",
   "version": "1.0.0",
   "description": "GAS MCP Bridge",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp": "bin/mcp.js"
+  },
   "directories": {
     "doc": "docs"
   },
@@ -38,5 +41,9 @@
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.40.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "picocolors": "^1.1.1"
   }
 }
