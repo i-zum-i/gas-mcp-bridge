@@ -1,96 +1,123 @@
-⸻
-
-📋 タスク一覧（目的・成果物つき）
-
-1. プロジェクト環境準備
-   •   1-1. リポジトリ作成
-      •   目的: ソースコードと設計を一元管理し、OSS として公開できるベースを作る
-      •   成果物: GitHub リポジトリ、README.md, LICENSE, .gitignore
-   •   1-2. npm 初期化
-      •   目的: Node.js/npm ベースの開発環境を整備し、依存管理を可能にする
-      •   成果物: package.json, node_modules/, 開発依存ライブラリ (TypeScript, Jest など)
-      •   実施内容: <!-- 実施済み: npm init -y を実行し、package.json を作成。npm install --save-dev typescript jest @types/jest ts-jest @google/clasp で開発依存ライブラリを導入 -->
-   •   1-3. clasp プロジェクト作成
-      •   目的: Google Apps Script 側のエンドポイント（WebApp）を準備する
-      •   成果物: .clasp.json, appsscript.json, GAS ソース雛形 (Code.js)
-      •   実施内容: <!-- スキップ: clasp の認証がインタラクティブなため、CI/CD 環境での実行が困難と判断 -->
+進捗フラグ
+   •   ✅ Done（完了） / 🟡 In Progress（作業中） / ⛔ Blocked（ブロック） / ⬜ Todo（未着手）
 
 ⸻
 
-2. ブリッジ基盤実装（npm パッケージ本体）
-   •   2-1. CLI エントリーポイント実装
-      •   目的: 開発者が mcp build, mcp start を簡単に実行できるようにする
-      •   成果物: bin/mcp.js（CLI 起動スクリプト）
-   •   2-2. clasp 設定読み取りモジュール実装
-      •   目的: GAS のデプロイ先 URL やパラメータを自動で解決し、手動設定を省く
-      •   成果物: src/configReader.ts（.clasp.json を解析してURLなどを返すモジュール）
-   •   2-3. MCP config ジェネレータ実装
-      •   目的: GAS 関数を自動的に MCP ツールとして定義し、クライアントから利用可能にする
-      •   成果物: mcp.tools.json（自動生成ファイル）、生成ロジック (src/generator.ts)
-      •   特記事項: アノテーションコメント (/* @mcp */) を解析し、MCP_STRICT フラグで挙動を切替
-   •   2-4. MCP サーバー起動実装
-      •   目的: MCP クライアントからのリクエストを受け取り、GAS に転送して応答を返すブリッジを提供する
-      •   成果物: src/server.ts（stdio/TCP サーバー処理）、HTTP 通信処理モジュール
+タスク一覧（WBS・依存関係考慮、開発者視点）
+
+0. リポジトリ基盤
+
+ID	タスク	目的（何のために）	成果物（何を作るか）	依存	状態
+0-1	リポジトリ初期化	OSS開発の土台を用意	package.json, .gitignore, LICENSE(MIT)		⬜
+0-2	TypeScript/ビルド	型・ビルド環境の整備	tsconfig.json, src/ 雛形, build スクリプト	0-1	⬜
+0-3	Lint/Format	品質統一と自動整形	.eslintrc, .prettierrc, npm scripts	0-1	⬜
+0-4	CI下地	PRで自動検証	.github/workflows/ci.yml (lint/test/build)	0-2,0-3	⬜
+
 
 ⸻
 
-3. GAS 側実装
-   •   3-1. doPost エントリーポイント実装
-      •   目的: 外部からの HTTP POST リクエストを受け取り、MCP ブリッジからの呼び出しを処理する
-      •   成果物: Code.js 内の doPost(e) 関数
-   •   3-2. アノテーション付き関数実装（例: sheet_appendRow）
-      •   目的: MCP 化された GAS 関数のサンプルを提供し、利用者が参考にできる状態を作る
-      •   成果物: Code.js 内の sheet_appendRow() 関数 + /* @mcp tool */ コメント
-   •   3-3. 認証情報管理
-      •   目的: GAS エンドポイントへの不正アクセスを防ぎ、安全にブリッジから呼び出せるようにする
-      •   成果物: ScriptProperties に保存された API_TOKEN、トークン検証処理
+1. CLI エントリ（bin/mcp）
+
+ID	タスク	目的	成果物	依存	状態
+1-1	CLI骨格	mcp build/start を提供	bin/mcp.js（shebang）, src/cli.ts	0-2	⬜
+1-2	環境変数実装	実行挙動の切替	GAS_API_TOKEN, MCP_STRICT, MCP_MODE, MCP_TRANSPORT, MCP_TCP_PORT, MCP_TIMEOUT_MS, MCP_RETRY の読み込み	1-1	⬜
+1-3	終了コード/ログ	CI/UX向上	統一ログ（picocolors）, 成功0/失敗≠0	1-1	⬜
+
 
 ⸻
 
-4. ビルド＆テスト
-   •   4-1. 単体テスト (Node)
-      •   目的: MCP config 生成ロジック、モード切替の正しさを保証する
-      •   成果物: Jest テストコード（__tests__/generator.test.ts）
-   •   4-2. 単体テスト (GAS)
-      •   目的: doPost → 関数呼び出しの流れが正しく動作するか確認する
-      •   成果物: clasp push/deploy 後に curl で叩くテストコード、スクリプト ID を使った呼び出し結果
-   •   4-3. 結合テスト
-      •   目的: MCP クライアント → ブリッジ → GAS のエンドツーエンド処理を確認する
-      •   成果物: テスト用 MCP クライアント設定、ログ確認、サンプル結果 JSON
+2. A方式ジェネレータ（注釈 → mcp.tools.json）
+
+ID	タスク	目的	成果物	依存	状態
+2-1	YAML抽出	/* @mcp ... */ 解析	src/generate.ts（fast-glob, js-yaml）	1-1	⬜
+2-2	仕様整合	name/schema必須、path既定	バリデーション関数、重複後勝ち	2-1	⬜
+2-3	3モード	注釈ゼロ時の分岐	既定=echo生成 / MCP_STRICT=1=エラー / MCP_MODE=empty=空	2-1	⬜
+2-4	Schema検証(任意)	早期不正検知	ajv によるスキーマ検証と警告	2-2	⬜
+2-5	CLI統合	mcp buildで自動生成	生成件数/モードのログ	1-1,2-1	⬜
+
 
 ⸻
 
-5. 開発運用
-   •   5-1. Lint / Format 設定
-      •   目的: コード品質の統一と自動整形を実現する
-      •   成果物: .eslintrc.js, .prettierrc
-   •   5-2. GitHub Actions CI
-      •   目的: プッシュや PR 時に自動でテストを回し、品質を担保する
-      •   成果物: .github/workflows/ci.yml
-   •   5-3. npm publish 準備
-      •   目的: OSS として npm 公開できるように整備する
-      •   成果物: package.json の公開設定、バージョン方針、公開ドキュメント
+3. clasp/Apps Script API 連携（WebApp URL 自動検出）
+
+ID	タスク	目的	成果物	依存	状態
+3-1	.clasp.json読取	scriptId特定	src/discover.ts（scriptId取得）	1-1	⬜
+3-2	~/.clasprc.json読取	認可情報取得	OAuth資格の読込ロジック	3-1	⬜
+3-3	API呼出	WebApp URL取得	googleapis で projects.deployments.list、URL抽出	3-2	⬜
+3-4	自動デプロイ	未デプロイ対処	execa('npx','clasp','deploy') → 再取得	3-3	⬜
+3-5	設定保存	起動設定の確定	.mcp-gas.json（gasUrl, scriptId, deploymentId, apiToken）	3-3	⬜
+3-6	例外とヒント	導入失敗時のUX改善	具体的な対処ログ（権限/未ログイン/未デプロイ）	3-3	⬜
+
 
 ⸻
 
-6. ドキュメント整備
-   •   6-1. README 強化
-      •   目的: OSS として利用者が導入しやすいドキュメントを提供する
-      •   成果物: 使用方法、Quick Start、サンプル記載済み README.md
-   •   6-2. 開発者向けドキュメント
-      •   目的: 開発チームが保守・拡張しやすいよう内部設計を共有する
-      •   成果物: /docs/design.md に詳細設計（mermaid 図含む）
-   •   6-3. チュートリアル追加
-      •   目的: 初心者が GAS を MCP サーバー化する流れを体験できるようにする
-      •   成果物: examples/ ディレクトリにサンプルプロジェクト一式
+4. MCPサーバ本体（ブリッジ）
+
+ID	タスク	目的	成果物	依存	状態
+4-1	stdioサーバ	クライアント互換実行	src/server.ts（@modelcontextprotocol/sdk）	1-1	⬜
+4-2	ツール登録	toolsの動的読み込み	mcp.tools.json → MCP Tool 配列登録	2-5	⬜
+4-3	echoフォールバック	注釈ゼロでもテスト可能	echo はローカル応答（テンプレ/例返却）	2-3,4-1	⬜
+4-4	TCP対応(任意)	利用環境の幅	startTcp({port}) オプション, ENV切替	4-1	⬜
+4-5	実行ログ	運用とデバッグ	ツール別実行ログ/時間/失敗理由出力	4-1	⬜
+
 
 ⸻
 
-⏩ 依存関係まとめ
-   •   1系 (環境準備) 完了後に 2系, 3系 を並行可能
-   •   2系 (ブリッジ) + 3系 (GAS) 完了後に 4系 (テスト) 着手
-   •   5系, 6系 は並行可能だが、最終的には 4系テスト完了後に公開準備
+5. GAS呼び出しクライアント
+
+ID	タスク	目的	成果物	依存	状態
+5-1	HTTP実装	GASへ安全にPOST	src/gas-client.ts（Authorization: Bearer）	4-2	⬜
+5-2	エラー変換	わかりやすい失敗	非200/{ok:false}をMCPエラーに変換	5-1	⬜
+5-3	Timeout/Retry	安定化	MCP_TIMEOUT_MS, MCP_RETRY 反映	5-1	⬜
+
 
 ⸻
 
-✅ これなら「なぜやるか」と「何が成果か」が明確になり、タスクレビューや進捗管理もしやすく
+6. テスト（モック中心）＋ ローカルE2E
+
+ID	タスク	目的	成果物	依存	状態
+6-1	モックGAS	GAS依存を外して高速検証	mocks/mock-gas-server.ts（POST /execで{ok,result}返却）	5-1	⬜
+6-2	Unit: generate	注釈→JSON生成の正当性	tests/unit/generate.test.ts（3モード含む）	2-5	⬜
+6-3	Unit: discover	API/認可の分岐網羅	tests/unit/discover.test.ts（APIモック）	3-6	⬜
+6-4	Unit: gas-client	成功/失敗の型保証	tests/unit/gas-client.test.ts（モックGASに対して）	6-1,5-2	⬜
+6-5	Unit: server	echo/登録/エラー	tests/unit/server.test.ts	4-3	⬜
+6-6	E2E: ローカル	全体疎通（擬似）	tests/e2e/local.test.ts（モックGAS + 実サーバ起動）	4系,5系,6-1	⬜
+
+※ 実GASでの手動E2Eは examples/ に分離（次章）
+
+⸻
+
+7. 実GASでの検証（任意・手動）
+
+ID	タスク	目的	成果物	依存	状態
+7-1	検証用clasp例	ドキュメント＆手動検証	examples/simple-gas-project/（appsscript.json, Code.gs, 注釈付サンプル）	0-1	⬜
+7-2	手動E2E手順	利用者の再現性確保	tests/e2e/e2e.gas.test.md（push/deploy/build/start/呼出の手順）	7-1	⬜
+
+ライブラリ開発に 必須ではない が、利用者/レビュワー体験を大幅改善。
+
+⸻
+
+8. ドキュメント
+
+ID	タスク	目的	成果物	依存	状態
+8-1	README(OSS)	導入の障壁を下げる	バッジ、Quick Start、注釈例、3モード説明、セキュリティ	1-1,2,3,4,5	⬜
+8-2	詳細設計書	保守と拡張の共有	docs/design.md（mermaid/処理フロー/I/O）	全体	⬜
+8-3	FAQ/トラブル	つまずき回避	docs/faq.md（clasprc差異、未デプロイ、権限）	3-6	⬜
+
+
+⸻
+
+9. リリース/運用
+
+ID	タスク	目的	成果物	依存	状態
+9-1	バージョニング	安定配布	初回 v0.1.0、CHANGELOG.md	6系	⬜
+9-2	npm公開	利用可能化	npm publish or semantic-release	9-1	⬜
+9-3	Issue/PRテンプレ	OSS運用の標準化	.github/ISSUE_TEMPLATE/*, PULL_REQUEST_TEMPLATE.md	0-1	⬜
+
+
+⸻
+
+依存関係の流れ（概要）
+   •   0基盤 → 1CLI → 2ジェネレータ & 3discover → 4サーバ → 5ガスクライアント
+   •   その後 6テスト（モック中心） → （任意）7実GAS検証 → 8ドキュメント → 9リリース
+   •   並行可：0-3と8は広く並行、4/5は2/3が概ね形になってからが安全。
