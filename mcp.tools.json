@@ -1,0 +1,21 @@
+{
+  "tools": [
+    {
+      "name": "echo",
+      "description": "A simple tool that echoes back the input. Used as a default when no other tools are defined.",
+      "path": "echo",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The message to echo back."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    }
+  ]
+}

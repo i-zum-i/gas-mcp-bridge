@@ -21,7 +21,7 @@ const readConfig = () => {
 
 export const run = async (argv: string[]) => {
   try {
-    const config = readConfig();
+    readConfig(); // Log configuration for debugging
     const program = new Command();
 
     program
