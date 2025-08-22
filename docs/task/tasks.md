@@ -9,9 +9,11 @@
    •   1-2. npm 初期化
       •   目的: Node.js/npm ベースの開発環境を整備し、依存管理を可能にする
       •   成果物: package.json, node_modules/, 開発依存ライブラリ (TypeScript, Jest など)
+      •   実施内容: <!-- 実施済み: npm init -y を実行し、package.json を作成。npm install --save-dev typescript jest @types/jest ts-jest @google/clasp で開発依存ライブラリを導入 -->
    •   1-3. clasp プロジェクト作成
       •   目的: Google Apps Script 側のエンドポイント（WebApp）を準備する
       •   成果物: .clasp.json, appsscript.json, GAS ソース雛形 (Code.js)
+      •   実施内容: <!-- スキップ: clasp の認証がインタラクティブなため、CI/CD 環境での実行が困難と判断 -->
 
 ⸻
 
