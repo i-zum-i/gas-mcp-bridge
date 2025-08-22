@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import fs from 'fs/promises';
 import { z } from 'zod';
 import { logger } from './logger.js';
+import { createGASClient, GASClientError } from './gas-client.js';
 
 interface ToolDefinition {
   name: string;
@@ -20,29 +21,14 @@ interface McpConfig {
   apiToken?: string;
 }
 
+// Legacy function maintained for backward compatibility
 async function callGAS(gasUrl: string, tool: string, args: unknown, token?: string): Promise<unknown> {
-  const response = await fetch(gasUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` })
-    },
-    body: JSON.stringify({
-      tool,
-      args
-    })
+  const client = createGASClient({
+    gasUrl,
+    apiToken: token,
   });
-
-  if (!response.ok) {
-    throw new Error(`GAS request failed: ${response.status} ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(result.message || 'GAS execution failed');
-  }
-
-  return result.result;
+  
+  return client.callTool(tool, args);
 }
 
 async function loadTools(): Promise<ToolDefinition[]> {
@@ -160,6 +146,12 @@ export const startServer = async () => {
             ]
           };
         } catch (error) {
+          if (error instanceof GASClientError) {
+            logger.error(`Tool ${tool.name} failed: ${error.message}` + 
+                        (error.statusCode ? ` (HTTP ${error.statusCode})` : ''));
+            throw new Error(`GAS execution failed: ${error.message}`);
+          }
+          
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           logger.error(`Tool ${tool.name} failed: ${errorMessage}`);
           throw new Error(`Tool execution failed: ${errorMessage}`);

@@ -71,9 +71,9 @@
 
 | ID | タスク | 目的（何のために） | 成果物（何を作るか） | 依存 | 状態 |
 |:---|:---|:---|:---|:---|:---|
-| 5-1 | HTTP実装 | GASへ安全にPOST | src/gas-client.ts（Authorization: Bearer） | 4-2 | ⬜ |
-| 5-2 | エラー変換 | わかりやすい失敗 | 非200/{ok:false}をMCPエラーに変換 | 5-1 | ⬜ |
-| 5-3 | Timeout/Retry | 安定化 | MCP\_TIMEOUT\_MS, MCP\_RETRY 反映 | 5-1 | ⬜ |
+| 5-1 | HTTP実装 | GASへ安全にPOST | src/gas-client.ts（Authorization: Bearer） | 4-2 | ✅ |
+| 5-2 | エラー変換 | わかりやすい失敗 | 非200/{ok:false}をMCPエラーに変換 | 5-1 | ✅ |
+| 5-3 | Timeout/Retry | 安定化 | MCP\_TIMEOUT\_MS, MCP\_RETRY 反映 | 5-1 | ✅ |
 
 -----
 
