@@ -2,11 +2,9 @@ import fg from 'fast-glob';
 import fs from 'fs/promises';
 import path from 'path';
 import yaml from 'js-yaml';
-import Ajv from 'ajv';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 const MCP_ANNOTATION_REGEX = /\/\*\*\s*@mcp((?:.|\r|\n)*?)\*\//g;
-const ajv = new Ajv();
 
 // Represents the raw, parsed tool definition from a file annotation.
 interface RawToolDefinition {
@@ -44,12 +42,6 @@ export const processTools = (rawTools: RawToolDefinition[]): Map<string, ToolDef
     if (typeof tool.schema !== 'object' || tool.schema === null) {
       logger.warn(`Skipping tool "${tool.name}" in ${tool.filePath} due to missing or invalid schema.`);
       continue;
-    }
-    const isSchemaValid = ajv.validateSchema(tool.schema);
-    if (!isSchemaValid) {
-      logger.warn(`Invalid JSON Schema for tool "${tool.name}" in ${tool.filePath}.`);
-      logger.warn(ajv.errorsText(ajv.errors));
-      // Continue processing, as this is an optional check
     }
 
     // 3. Default path (if not provided)

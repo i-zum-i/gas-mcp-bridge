@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import fs from 'fs/promises';
-import { logger } from './logger';
-import { generate } from './generate';
-import * as discover from './discover';
+import { logger } from './logger.js';
+import { generate } from './generate.js';
+import * as discover from './discover.js';
+import { startServer } from './server.js';
 
 const readConfig = () => {
   const config = {
@@ -50,9 +51,8 @@ export const run = async (argv: string[]) => {
     program
       .command('start')
       .description('Start the MCP server')
-      .action(() => {
-        logger.info('Starting MCP server...');
-        // TODO: Implement server logic from Task 4
+      .action(async () => {
+        await startServer();
       });
 
     program

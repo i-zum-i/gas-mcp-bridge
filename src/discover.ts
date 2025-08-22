@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { google } from 'googleapis';
 import { execa } from 'execa';
-import { logger } from './logger';
+import { logger } from './logger.js';
 
 const CLASP_CONFIG_FILE = '.clasp.json';
 const CLASP_RC_FILE = '.clasprc.json';

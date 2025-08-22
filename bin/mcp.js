@@ -2,7 +2,7 @@
 
 // This is the CLI entry point.
 // It imports the compiled TypeScript code from the dist directory.
-const { run } = require('../dist/cli');
+import { run } from '../dist/cli.js';
 
 run(process.argv).catch((error) => {
   console.error(error);
