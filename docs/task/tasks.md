@@ -19,9 +19,9 @@ ID	タスク	目的（何のために）	成果物（何を作るか）	依存	�
 1. CLI エントリ（bin/mcp）
 
 ID	タスク	目的	成果物	依存	状態
-1-1	CLI骨格	mcp build/start を提供	bin/mcp.js（shebang）, src/cli.ts	0-2	⬜
-1-2	環境変数実装	実行挙動の切替	GAS_API_TOKEN, MCP_STRICT, MCP_MODE, MCP_TRANSPORT, MCP_TCP_PORT, MCP_TIMEOUT_MS, MCP_RETRY の読み込み	1-1	⬜
-1-3	終了コード/ログ	CI/UX向上	統一ログ（picocolors）, 成功0/失敗≠0	1-1	⬜
+1-1	CLI骨格	mcp build/start を提供	bin/mcp.js（shebang）, src/cli.ts	0-2	✅
+1-2	環境変数実装	実行挙動の切替	GAS_API_TOKEN, MCP_STRICT, MCP_MODE, MCP_TRANSPORT, MCP_TCP_PORT, MCP_TIMEOUT_MS, MCP_RETRY の読み込み	1-1	✅
+1-3	終了コード/ログ	CI/UX向上	統一ログ（picocolors）, 成功0/失敗≠0	1-1	✅
 
 
 ⸻
