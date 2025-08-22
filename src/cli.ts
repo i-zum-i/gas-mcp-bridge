@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import fs from 'fs/promises';
 import { logger } from './logger';
 import { generate } from './generate';
+import * as discover from './discover';
 
 const readConfig = () => {
   const config = {
@@ -52,6 +53,37 @@ export const run = async (argv: string[]) => {
       .action(() => {
         logger.info('Starting MCP server...');
         // TODO: Implement server logic from Task 4
+      });
+
+    program
+      .command('discover')
+      .description('Discover GAS project settings and save to .mcp-gas.json')
+      .action(async () => {
+        logger.info('Discovering GAS project settings...');
+
+        const scriptId = await discover.getScriptId();
+        const { accessToken } = await discover.getClaspCredentials();
+
+        let deployment = await discover.getWebAppDeployment(scriptId, accessToken);
+
+        if (!deployment) {
+          logger.warn('No active web app deployment found. Attempting to create one...');
+          await discover.runClaspDeploy();
+          deployment = await discover.getWebAppDeployment(scriptId, accessToken);
+        }
+
+        if (!deployment) {
+          throw new Error('Failed to find or create a web app deployment. Please check your clasp setup.');
+        }
+
+        const config: discover.McpConfig = {
+          scriptId,
+          deploymentId: deployment.deploymentId,
+          gasUrl: deployment.url,
+          apiToken: accessToken,
+        };
+
+        await discover.saveMcpConfig(config);
       });
 
     await program.parseAsync(argv);
