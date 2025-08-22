@@ -41,12 +41,12 @@ ID	タスク	目的	成果物	依存	状態
 3. clasp/Apps Script API 連携（WebApp URL 自動検出）
 
 ID	タスク	目的	成果物	依存	状態
-3-1	.clasp.json読取	scriptId特定	src/discover.ts（scriptId取得）	1-1	⬜
-3-2	~/.clasprc.json読取	認可情報取得	OAuth資格の読込ロジック	3-1	⬜
-3-3	API呼出	WebApp URL取得	googleapis で projects.deployments.list、URL抽出	3-2	⬜
-3-4	自動デプロイ	未デプロイ対処	execa('npx','clasp','deploy') → 再取得	3-3	⬜
-3-5	設定保存	起動設定の確定	.mcp-gas.json（gasUrl, scriptId, deploymentId, apiToken）	3-3	⬜
-3-6	例外とヒント	導入失敗時のUX改善	具体的な対処ログ（権限/未ログイン/未デプロイ）	3-3	⬜
+3-1	.clasp.json読取	scriptId特定	src/discover.ts（scriptId取得）	1-1	✅
+3-2	~/.clasprc.json読取	認可情報取得	OAuth資格の読込ロジック	3-1	✅
+3-3	API呼出	WebApp URL取得	googleapis で projects.deployments.list、URL抽出	3-2	✅
+3-4	自動デプロイ	未デプロイ対処	execa('npx','clasp','deploy') → 再取得	3-3	✅
+3-5	設定保存	起動設定の確定	.mcp-gas.json（gasUrl, scriptId, deploymentId, apiToken）	3-3	✅
+3-6	例外とヒント	導入失敗時のUX改善	具体的な対処ログ（権限/未ログイン/未デプロイ）	3-3	✅
 
 
 ⸻
