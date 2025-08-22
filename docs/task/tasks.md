@@ -8,9 +8,9 @@
 0. リポジトリ基盤
 
 ID	タスク	目的（何のために）	成果物（何を作るか）	依存	状態
-0-1	リポジトリ初期化	OSS開発の土台を用意	package.json, .gitignore, LICENSE(MIT)		⬜
-0-2	TypeScript/ビルド	型・ビルド環境の整備	tsconfig.json, src/ 雛形, build スクリプト	0-1	⬜
-0-3	Lint/Format	品質統一と自動整形	.eslintrc, .prettierrc, npm scripts	0-1	⬜
+0-1	リポジトリ初期化	OSS開発の土台を用意	package.json, .gitignore, LICENSE(MIT)		✅
+0-2	TypeScript/ビルド	型・ビルド環境の整備	tsconfig.json, src/ 雛形, build スクリプト	0-1	✅
+0-3	Lint/Format	品質統一と自動整形	.eslintrc, .prettierrc, npm scripts	0-1	✅
 0-4	CI下地	PRで自動検証	.github/workflows/ci.yml (lint/test/build)	0-2,0-3	⬜
 
 
