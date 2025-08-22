@@ -54,11 +54,11 @@ ID	タスク	目的	成果物	依存	状態
 4. MCPサーバ本体（ブリッジ）
 
 ID	タスク	目的	成果物	依存	状態
-4-1	stdioサーバ	クライアント互換実行	src/server.ts（@modelcontextprotocol/sdk）	1-1	⬜
-4-2	ツール登録	toolsの動的読み込み	mcp.tools.json → MCP Tool 配列登録	2-5	⬜
-4-3	echoフォールバック	注釈ゼロでもテスト可能	echo はローカル応答（テンプレ/例返却）	2-3,4-1	⬜
-4-4	TCP対応(任意)	利用環境の幅	startTcp({port}) オプション, ENV切替	4-1	⬜
-4-5	実行ログ	運用とデバッグ	ツール別実行ログ/時間/失敗理由出力	4-1	⬜
+4-1	stdioサーバ	クライアント互換実行	src/server.ts（@modelcontextprotocol/sdk）	1-1	⛔
+4-2	ツール登録	toolsの動的読み込み	mcp.tools.json → MCP Tool 配列登録	2-5	⛔
+4-3	echoフォールバック	注釈ゼロでもテスト可能	echo はローカル応答（テンプレ/例返却）	2-3,4-1	⛔
+4-4	TCP対応(任意)	利用環境の幅	startTcp({port}) オプション, ENV切替	4-1	⛔
+4-5	実行ログ	運用とデバッグ	ツール別実行ログ/時間/失敗理由出力	4-1	⛔
 
 
 ⸻
