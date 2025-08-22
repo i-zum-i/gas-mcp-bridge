@@ -13,9 +13,9 @@
 A. リポジトリ & パッケージ基盤
 
 ID	タスク	詳細	依存	成果物	状態
-A-1	リポジトリ雛形作成	pnpm/npm初期化、src//dist/、TS設定、ESLint、Prettier、commit lint		ルート構成、package.json	⬜
-A-2	ライセンス/CI下地	LICENSE(MIT),CODE_OF_CONDUCT.md,CONTRIBUTING.md、GitHub Actions（lint/test/build）	A-1	ルートDocs、.github/workflows	⬜
-A-3	NPM公開設定	name: gas-mcp-bridge、bin: { mcp: "./dist/cli.js" }、semantic-release	A-1	公開可能package.json	⬜
+A-1	リポジトリ雛形作成	pnpm/npm初期化、src//dist/、TS設定、ESLint、Prettier、commit lint		ルート構成、package.json	✅
+A-2	ライセンス/CI下地	LICENSE(MIT),CODE_OF_CONDUCT.md,CONTRIBUTING.md、GitHub Actions（lint/test/build）	A-1	ルートDocs、.github/workflows	✅
+A-3	NPM公開設定	name: gas-mcp-bridge、bin: { mcp: "./dist/cli.js" }、semantic-release	A-1	公開可能package.json	✅
 
 B. CLI・コマンド実装
 
