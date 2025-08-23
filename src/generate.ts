@@ -4,7 +4,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { logger } from './logger.js';
 
-const MCP_ANNOTATION_REGEX = /\/\*\*\s*@mcp((?:.|\r|\n)*?)\*\//g;
+const MCP_ANNOTATION_REGEX = /\/\*\*?\s*@mcp((?:.|\r|\n)*?)\*\//g;
 
 // Represents the raw, parsed tool definition from a file annotation.
 interface RawToolDefinition {
@@ -127,25 +127,24 @@ export const findTools = async (searchPath = '.'): Promise<RawToolDefinition[]> 
   for (const file of sourceFiles) {
     try {
       const content = await fs.readFile(file, 'utf-8');
-      const matches = content.matchAll(MCP_ANNOTATION_REGEX);
+      const matches = [...content.matchAll(MCP_ANNOTATION_REGEX)];
 
       for (const match of matches) {
         const rawYamlContent = match[1];
         if (rawYamlContent) {
-          // Clean the YAML content by removing the leading '*' from each line
-          const cleanedYaml = rawYamlContent
-            .split('\n')
-            .map(line => line.trim().replace(/^\* ?/, ''))
-            .join('\n');
-
-          const toolDef = yaml.load(cleanedYaml) as RawToolDefinition;
-          // Add filePath to the definition for later use (e.g., default path)
-          const toolWithPath = { ...toolDef, filePath: file };
-          allTools.push(toolWithPath);
+          const cleanedYaml = rawYamlContent.trim();
+          try {
+            const toolDef = yaml.load(cleanedYaml) as RawToolDefinition;
+            const toolWithPath = { ...toolDef, filePath: file };
+            allTools.push(toolWithPath);
+          } catch (yamlError) {
+            logger.warn(`YAML parse error in ${path.basename(file)}: ${yamlError}`);
+          }
         }
       }
     } catch (error) {
       logger.warn(`Could not read or parse file ${path.basename(file)}: ${error}`);
+      continue; // Continue to the next file
     }
   }
 

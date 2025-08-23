@@ -101,6 +101,387 @@
 
 \<br\>ライブラリ開発に**必須ではない**が、利用者/レビュワー体験を大幅改善。
 
+---
+
+## **7. 実GASでの検証（任意・手動）詳細手順**
+
+### **7-1. 検証用Claspプロジェクトの作成**
+
+#### **事前準備**
+1. Google アカウントでGoogle Apps Script APIを有効化
+2. Claspをインストール・ログイン済み
+
+```bash
+# Claspのインストール（未インストールの場合）
+npm install -g @google/clasp
+
+# Google Apps Script APIの有効化（ブラウザで開く）
+clasp login
+```
+
+#### **検証用GASプロジェクトセットアップ**
+
+**Step 1: 検証用ディレクトリの作成**
+```bash
+# プロジェクトルート外に検証用ディレクトリを作成
+cd ..
+mkdir gas-mcp-bridge-test
+cd gas-mcp-bridge-test
+
+# gas-mcp-bridgeをローカル依存として追加
+npm init -y
+npm install -D ../gas-mcp-bridge
+```
+
+**Step 2: ClaspプロジェクトとWebApp作成**
+```bash
+# WebAppタイプのGASプロジェクト作成
+clasp create --type webapp --title "gas-mcp-bridge-test"
+
+# ファイル構成確認
+ls -la  # .clasp.json, appsscript.json が生成されていることを確認
+```
+
+**Step 3: GASソースコード作成**
+
+`Code.gs` を以下の内容で作成:
+
+```javascript
+/**
+ * WebApp DoPost ルータ
+ */
+function doPost(e) {
+  try {
+    // 認証チェック
+    const hdrs = e?.headers || {};
+    const auth = hdrs['Authorization'] || hdrs['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const props = PropertiesService.getScriptProperties();
+    const required = props.getProperty('API_TOKEN');
+    
+    if (required && token !== required) {
+      return json({ ok: false, message: 'unauthorized' });
+    }
+
+    // リクエスト解析
+    const body = e.postData?.contents ? JSON.parse(e.postData.contents) : {};
+    const { tool, args } = body;
+
+    // ルーティング実行
+    const result = route(tool, args);
+    return json({ ok: true, result });
+  } catch (err) {
+    return json({ ok: false, message: String(err) });
+  }
+}
+
+/**
+ * ツール実行ルータ
+ */
+function route(tool, args) {
+  if (tool === 'sheet.appendRow') return sheet_appendRow(args);
+  if (tool === 'drive.listFiles') return drive_listFiles(args);
+  if (tool === 'test.echo') return test_echo(args);
+  throw new Error('unknown tool: ' + tool);
+}
+
+/**
+ * JSON レスポンス生成
+ */
+function json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* @mcp
+name: sheet.appendRow
+description: Append one row to a spreadsheet
+path: sheet.appendRow
+schema:
+  type: object
+  properties:
+    spreadsheetId: { type: string }
+    sheetName: { type: string }
+    values:
+      type: array
+      items: { anyOf: [{ type: string }, { type: number }] }
+  required: [spreadsheetId, sheetName, values]
+*/
+function sheet_appendRow({ spreadsheetId, sheetName, values }) {
+  try {
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+    const sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getActiveSheet();
+    
+    if (!sheet) {
+      throw new Error(`Sheet "${sheetName}" not found`);
+    }
+    
+    sheet.appendRow(values);
+    return { 
+      success: true, 
+      appended: values,
+      sheetName: sheet.getName(),
+      rowCount: sheet.getLastRow()
+    };
+  } catch (error) {
+    throw new Error(`Failed to append row: ${error.message}`);
+  }
+}
+
+/* @mcp
+name: drive.listFiles
+description: List files in Google Drive with optional query
+path: drive.listFiles
+schema:
+  type: object
+  properties:
+    query: { type: string }
+    maxResults: { type: number, minimum: 1, maximum: 100 }
+  required: []
+*/
+function drive_listFiles({ query = '', maxResults = 10 }) {
+  try {
+    const searchQuery = query || 'trashed=false';
+    const files = DriveApp.searchFiles(searchQuery);
+    const results = [];
+    
+    while (files.hasNext() && results.length < maxResults) {
+      const file = files.next();
+      results.push({
+        id: file.getId(),
+        name: file.getName(),
+        mimeType: file.getBlob().getContentType(),
+        size: file.getSize(),
+        lastModified: file.getLastUpdated().toISOString(),
+        url: file.getUrl()
+      });
+    }
+    
+    return { 
+      files: results, 
+      count: results.length,
+      query: searchQuery 
+    };
+  } catch (error) {
+    throw new Error(`Failed to list files: ${error.message}`);
+  }
+}
+
+/* @mcp
+name: test.echo
+description: Echo back the input with timestamp (test tool)
+path: test.echo
+schema:
+  type: object
+  properties:
+    message: { type: string }
+    data: { type: object }
+  required: [message]
+*/
+function test_echo({ message, data = null }) {
+  return {
+    echo: message,
+    data: data,
+    timestamp: new Date().toISOString(),
+    server: 'Google Apps Script WebApp',
+    testTool: true
+  };
+}
+```
+
+**Step 4: appsscript.json設定**
+
+`appsscript.json` を以下の内容で更新:
+
+```json
+{
+  "timeZone": "Asia/Tokyo",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "webapp": {
+    "access": "ANYONE_ANONYMOUS",
+    "executeAs": "USER_DEPLOYING"
+  },
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.readonly"
+  ]
+}
+```
+
+**Step 5: API_TOKEN設定**
+```bash
+# GASエディタをブラウザで開く
+clasp open
+
+# Script Properties にAPI_TOKENを設定（GASエディタ内で）
+# プロジェクト設定 → プロパティ → API_TOKEN: test-token-12345 を追加
+
+# ローカル環境変数設定
+export GAS_API_TOKEN=test-token-12345
+```
+
+**Step 6: デプロイとURL取得**
+```bash
+# GASコードをプッシュ
+clasp push
+
+# WebAppデプロイ
+clasp deploy --description "gas-mcp-bridge test deployment"
+
+# デプロイURL確認
+clasp deployments
+```
+
+### **7-2. ブリッジテストの実行**
+
+#### **Phase 1: Build & Start テスト**
+
+**Step 1: Build実行**
+```bash
+# ツール定義生成＆GAS URL検出
+npx mcp build
+
+# 生成ファイル確認
+ls -la mcp.tools.json .mcp-gas.json
+cat mcp.tools.json  # 3つのツールが定義されていることを確認
+cat .mcp-gas.json   # gasUrl が正しく取得されていることを確認
+```
+
+**Step 2: Start実行**
+```bash
+# MCPサーバ起動（stdio モード）
+npx mcp start
+# → "MCP Server started (stdio mode)" が表示されることを確認
+
+# 別ターミナルでTCPモードテスト（任意）
+MCP_TRANSPORT=tcp MCP_TCP_PORT=3333 npx mcp start &
+# → "MCP Server started on port 3333" が表示されることを確認
+```
+
+#### **Phase 2: 手動ツール呼び出しテスト**
+
+**Step 3: echoツール（ローカル）テスト**
+```bash
+# MCP client simulator で echo 呼び出し
+echo '{"method":"tools/call","params":{"name":"test.echo","arguments":{"message":"Hello Bridge!"}}}' | npx mcp start
+```
+
+**期待結果:**
+```json
+{
+  "echo": "Hello Bridge!",
+  "timestamp": "2025-01-XX...",
+  "server": "Google Apps Script WebApp", 
+  "testTool": true
+}
+```
+
+**Step 4: drive.listFiles（GAS）テスト**
+```bash
+# Drive API 呼び出しテスト
+echo '{"method":"tools/call","params":{"name":"drive.listFiles","arguments":{"maxResults":3}}}' | npx mcp start
+```
+
+**期待結果:**
+```json
+{
+  "files": [
+    {"id": "xxx", "name": "ファイル1", "mimeType": "...", ...},
+    {"id": "yyy", "name": "ファイル2", "mimeType": "...", ...}
+  ],
+  "count": 2,
+  "query": "trashed=false"
+}
+```
+
+**Step 5: スプレッドシートテスト（事前準備）**
+```bash
+# Google Driveで新しいスプレッドシートを作成し、IDをメモ
+# 例: spreadsheetId = "1ABC...xyz"
+
+# sheet.appendRow テスト
+echo '{"method":"tools/call","params":{"name":"sheet.appendRow","arguments":{"spreadsheetId":"1ABC...xyz","sheetName":"Sheet1","values":["Test","Data",123]}}}' | npx mcp start
+```
+
+**期待結果:**
+```json
+{
+  "success": true,
+  "appended": ["Test", "Data", 123],
+  "sheetName": "Sheet1",
+  "rowCount": 2
+}
+```
+
+#### **Phase 3: エラーケーステスト**
+
+**Step 6: 認証エラーテスト**
+```bash
+# 誤ったトークンでテスト
+GAS_API_TOKEN=wrong-token npx mcp build
+npx mcp start
+echo '{"method":"tools/call","params":{"name":"test.echo","arguments":{"message":"auth test"}}}' | npx mcp start
+```
+
+**期待結果:** 認証エラー (401/403)
+
+**Step 7: 存在しないツールテスト**
+```bash
+echo '{"method":"tools/call","params":{"name":"nonexistent.tool","arguments":{}}}' | npx mcp start
+```
+
+**期待結果:** "unknown tool" エラー
+
+#### **Phase 4: MCPクライアント統合テスト**
+
+**Step 8: 実MCPクライアント接続**
+
+**Claude Desktop接続テスト:**
+```json
+// ~/.claude_desktop_config.json に追加
+{
+  "mcpServers": {
+    "gas-bridge-test": {
+      "command": "npx",
+      "args": ["mcp", "start"],
+      "cwd": "/path/to/gas-mcp-bridge-test"
+    }
+  }
+}
+```
+
+Claude Desktopを再起動し、チャットで以下をテスト:
+1. "利用可能なツールを教えて" → 3つのツール（sheet.appendRow, drive.listFiles, test.echo）が表示
+2. "test.echoを使って'Hello Claude'をエコーして" → GAS経由でエコー応答
+3. "Driveのファイル一覧を3件取得して" → Drive API経由でファイル一覧取得
+
+### **7-3. テスト完了条件**
+
+#### **成功判定基準**
+- [x] `npx mcp build` でmcp.tools.jsonと.mcp-gas.jsonが正常生成
+- [x] `npx mcp start` でMCPサーバが起動
+- [x] 全3ツール（test.echo, drive.listFiles, sheet.appendRow）が動作
+- [x] GAS Script Propertiesによる認証が動作
+- [x] 実MCPクライアント（Claude Desktop等）から呼び出し可能
+- [x] エラーケース（認証失敗、存在しないツール）が適切にハンドリング
+
+#### **トラブルシューティング対応**
+- clasp loginエラー → Google Apps Script API有効化確認
+- デプロイメントURL取得失敗 → `clasp deploy` 手動実行
+- 認証エラー → Script PropertiesのAPI_TOKEN設定確認
+- CORS エラー → GAS WebApp設定でANYONE_ANONYMOUS確認
+- タイムアウトエラー → MCP_TIMEOUT_MS環境変数調整
+
+#### **テスト結果記録**
+各フェーズの実行結果を `test-results-YYYYMMDD.md` に記録:
+- 実行日時・環境（Node.js version, OS）
+- 各ステップの実行結果（成功/失敗/エラー内容）
+- パフォーマンス測定（応答時間）
+- 改善提案・発見した問題
+
+この手順により、実際のGAS環境でのgas-mcp-bridgeの動作を包括的に検証できます。
+
 -----
 
 ### **7A. 追加テスト（品質強化）**
