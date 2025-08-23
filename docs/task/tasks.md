@@ -81,12 +81,12 @@
 
 | ID | タスク | 目的（何のために） | 成果物（何を作るか） | 依存 | 状態 |
 |:---|:---|:---|:---|:---|:---|
-| 6-1 | モックGAS | GAS依存を外して高速検証 | mocks/mock-gas-server.ts（POST /execで{ok,result}返却） | 5-1 | ⬜ |
-| 6-2 | Unit: generate | 注釈→JSON生成の正当性 | tests/unit/generate.test.ts（3モード含む） | 2-5 | ⬜ |
-| 6-3 | Unit: discover | API/認可の分岐網羅 | tests/unit/discover.test.ts（APIモック） | 3-6 | ⬜ |
-| 6-4 | Unit: gas-client | 成功/失敗の型保証 | tests/unit/gas-client.test.ts（モックGASに対して） | 6-1, 5-2 | ⬜ |
-| 6-5 | Unit: server | echo/登録/エラー | tests/unit/server.test.ts | 4-3 | ⬜ |
-| 6-6 | E2E: ローカル | 全体疎通（擬似） | tests/e2e/local.test.ts（モックGAS + 実サーバ起動） | 4系, 5系, 6-1 | ⬜ |
+| 6-1 | モックGAS | GAS依存を外して高速検証 | mocks/mock-gas-server.ts（POST /execで{ok,result}返却） | 5-1 | ✅ |
+| 6-2 | Unit: generate | 注釈→JSON生成の正当性 | tests/unit/generate.test.ts（3モード含む） | 2-5 | ✅ |
+| 6-3 | Unit: discover | API/認可の分岐網羅 | tests/unit/discover.test.ts（APIモック） | 3-6 | ✅ |
+| 6-4 | Unit: gas-client | 成功/失敗の型保証 | tests/unit/gas-client.test.ts（モックGASに対して） | 6-1, 5-2 | ✅ |
+| 6-5 | Unit: server | echo/登録/エラー | tests/unit/server.test.ts | 4-3 | ✅ |
+| 6-6 | E2E: ローカル | 全体疎通（擬似） | tests/e2e/local.test.ts（モックGAS + 実サーバ起動） | 4系, 5系, 6-1 | ✅ |
 
 ※ 実GASでの手動E2Eは examples/ に分離（次章）
 
