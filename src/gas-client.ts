@@ -46,6 +46,14 @@ export class GASClient {
     const request: GASRequest = { tool, args };
     let lastError: Error | null = null;
 
+    logger.debug(`Starting GAS call for tool "${tool}"`, {
+      gasUrl: this.gasUrl,
+      hasApiToken: !!this.apiToken,
+      timeoutMs: this.timeoutMs,
+      maxRetries: this.maxRetries,
+      request
+    });
+
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
         if (attempt > 0) {
@@ -56,11 +64,19 @@ export class GASClient {
         
         if (attempt > 0) {
           logger.success(`GAS call succeeded on retry for tool "${tool}"`);
+        } else {
+          logger.debug(`GAS call succeeded for tool "${tool}"`, { result });
         }
         
         return result;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        
+        logger.debug(`GAS call attempt ${attempt + 1} failed for tool "${tool}"`, {
+          error: lastError.message,
+          isGASClientError: error instanceof GASClientError,
+          statusCode: error instanceof GASClientError ? error.statusCode : undefined
+        });
         
         if (attempt < this.maxRetries) {
           logger.warn(`GAS call failed for tool "${tool}": ${lastError.message}. Retrying...`);
@@ -81,6 +97,14 @@ export class GASClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    logger.debug('Sending HTTP request to GAS', {
+      url: this.gasUrl,
+      method: 'POST',
+      hasAuth: !!this.apiToken,
+      timeout: this.timeoutMs,
+      requestBody: request
+    });
+
     try {
       const response = await fetch(this.gasUrl, {
         method: 'POST',
@@ -94,15 +118,36 @@ export class GASClient {
 
       clearTimeout(timeoutId);
 
+      logger.debug('Received HTTP response from GAS', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+
       // Handle non-200 HTTP status codes
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read response body');
+        logger.debug('HTTP error response body', { errorText });
+        
         throw new GASClientError(
           `HTTP ${response.status}: ${response.statusText}`,
           response.status
         );
       }
 
-      const gasResponse: GASResponse = await response.json();
+      const responseText = await response.text();
+      logger.debug('Raw response text from GAS', { responseText });
+
+      let gasResponse: GASResponse;
+      try {
+        gasResponse = JSON.parse(responseText);
+      } catch (parseError) {
+        logger.debug('Failed to parse JSON response', { parseError, responseText });
+        throw new GASClientError(`Invalid JSON response from GAS: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
+
+      logger.debug('Parsed GAS response', { gasResponse });
 
       // Handle GAS-level errors (non-ok responses)
       if (!gasResponse.ok) {
@@ -124,6 +169,12 @@ export class GASClient {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new GASClientError(`Request timeout after ${this.timeoutMs}ms`);
       }
+      
+      logger.debug('Network error details', { 
+        error: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'unknown',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       
       throw new GASClientError(
         `Network error: ${error instanceof Error ? error.message : String(error)}`

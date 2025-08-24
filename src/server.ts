@@ -1,9 +1,8 @@
-// @ts-expect-error - MCP SDK type definitions are not properly exported
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-// @ts-expect-error - MCP SDK type definitions are not properly exported
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import fs from 'fs/promises';
-import { z } from 'zod';
+import path from 'path';
+import { z, type ZodTypeAny } from 'zod';
 import { logger } from './logger.js';
 import { createGASClient, GASClientError } from './gas-client.js';
 
@@ -11,23 +10,39 @@ interface ToolDefinition {
   name: string;
   description: string;
   path: string;
-  schema: object;
+  // 期待は JSON Schema 互換
+  schema?: {
+    type?: string;
+    description?: string;
+    properties?: Record<string, any>;
+    required?: string[];
+    items?: any;
+    enum?: any[];
+  };
 }
 
-interface McpConfig {
-  gasUrl: string;
-  scriptId: string;
+type AuthConfig =
+  | { type: 'scriptPropertiesToken'; tokenPropertyKey: string }
+  | { type: 'oauthAccessToken' };
+
+interface McpConfigNew {
+  webAppUrl?: string;          // 新形式
+  gasUrl?: string;             // 互換
+  scriptId?: string;
   deploymentId?: string;
-  apiToken?: string;
+  auth?: AuthConfig;
+  apiToken?: string;           // 互換（非推奨）
+  devOauthToken?: string;      // 開発用（短命）
 }
 
-// Legacy function maintained for backward compatibility
+type McpConfig = McpConfigNew;
+
+/** レガシー互換の GAS 呼び出し */
 async function callGAS(gasUrl: string, tool: string, args: unknown, token?: string): Promise<unknown> {
   const client = createGASClient({
     gasUrl,
     apiToken: token,
   });
-  
   return client.callTool(tool, args);
 }
 
@@ -48,119 +63,232 @@ async function loadTools(): Promise<ToolDefinition[]> {
           properties: {
             message: {
               type: 'string',
-              description: 'The message to echo back.'
-            }
+              description: 'The message to echo back.',
+            },
           },
-          required: ['message']
-        }
-      }
+          required: ['message'],
+        },
+      },
     ];
   }
 }
 
 async function loadConfig(): Promise<McpConfig | null> {
+  const cfgPath = process.env.MCP_GAS_CONFIG_PATH || path.resolve('.mcp-gas.json');
   try {
-    const configContent = await fs.readFile('.mcp-gas.json', 'utf-8');
-    return JSON.parse(configContent);
+    const raw = await fs.readFile(cfgPath, 'utf-8');
+    const parsed = JSON.parse(raw) as McpConfig;
+    return parsed;
   } catch {
     logger.warn('.mcp-gas.json not found. Echo tool will work, but GAS tools will fail.');
     return null;
   }
 }
 
+/** JSON Schema → ZodRawShape (最小変換) */
+function jsonSchemaToZodShape(
+  schema: ToolDefinition['schema']
+): Record<string, ZodTypeAny> {
+  const shape: Record<string, ZodTypeAny> = {};
+  if (!schema || schema.type !== 'object' || !schema.properties) {
+    return shape; // 空 shape（引数なし）
+  }
+
+  const req = new Set<string>(Array.isArray(schema.required) ? schema.required : []);
+
+  for (const [key, prop] of Object.entries(schema.properties)) {
+    let t: ZodTypeAny;
+
+    const propType = prop?.type as string | undefined;
+    const desc = prop?.description as string | undefined;
+
+    const wrapDesc = (zz: ZodTypeAny) => (desc ? zz.describe(desc) : zz);
+
+    switch (propType) {
+      case 'string':
+        t = wrapDesc(z.string());
+        break;
+      case 'number':
+        t = wrapDesc(z.number());
+        break;
+      case 'integer':
+        t = wrapDesc(z.number().int());
+        break;
+      case 'boolean':
+        t = wrapDesc(z.boolean());
+        break;
+      case 'array': {
+        const itemsType = (prop?.items?.type as string | undefined) || 'any';
+        let zi: ZodTypeAny;
+        switch (itemsType) {
+          case 'string': zi = z.string(); break;
+          case 'number': zi = z.number(); break;
+          case 'integer': zi = z.number().int(); break;
+          case 'boolean': zi = z.boolean(); break;
+          case 'object': zi = z.record(z.any()); break;
+          default: zi = z.any(); break;
+        }
+        t = wrapDesc(z.array(zi));
+        break;
+      }
+      case 'object':
+        t = wrapDesc(z.record(z.any()));
+        break;
+      default:
+        t = wrapDesc(z.any());
+        break;
+    }
+
+    // 必須でなければ optional
+    if (!req.has(key)) {
+      t = t.optional();
+    }
+    shape[key] = t;
+  }
+
+  return shape;
+}
+
 export const startServer = async () => {
+  logger.debug('Starting MCP server initialization');
+
   const server = new McpServer(
     {
       name: 'gas-mcp-bridge',
-      version: '1.0.0'
+      version: '1.0.0',
     },
     {
       capabilities: {
-        tools: {}
-      }
+        tools: {},
+      },
     }
   );
 
+  logger.debug('Loading tools and configuration');
   const tools = await loadTools();
   const config = await loadConfig();
-  const gasApiToken = process.env.GAS_API_TOKEN || config?.apiToken;
 
-  // Register tools dynamically
+  // GAS エンドポイント（新: webAppUrl / 旧: gasUrl）
+  const gasUrl = config?.webAppUrl || config?.gasUrl;
+
+  // 認証トークン（環境変数 > 旧 apiToken > 開発用 devOauthToken）
+  const gasApiToken =
+    process.env.GAS_API_TOKEN ||
+    config?.apiToken ||
+    config?.devOauthToken ||
+    undefined;
+
+  logger.debug('Configuration loaded', {
+    toolCount: tools.length,
+    hasConfig: !!config,
+    hasApiToken: !!gasApiToken,
+    configScriptId: (config as any)?.scriptId,
+    configGasUrl: gasUrl,
+  });
+
+  // ---- ツール登録 ----
+  logger.debug('Registering tools', { tools: tools.map(t => ({ name: t.name, path: t.path })) });
+
   for (const tool of tools) {
+    logger.debug(`Registering tool: ${tool.name}`);
+
     if (tool.name === 'echo' && tool.path === 'echo') {
-      // Register echo tool
-      server.registerTool(tool.name, {
-        title: tool.name,
-        description: tool.description,
-        inputSchema: {
-          message: z.string().describe('The message to echo back.')
+      // Echo ツール
+      server.registerTool(
+        tool.name,
+        {
+          title: tool.name,
+          description: tool.description,
+          // ZodRawShape を渡す
+          inputSchema: {
+            message: z.string().describe('The message to echo back.'),
+          },
+        },
+        async ({ message }: { message: string }) => {
+          logger.mcpRequest('echo', { message });
+
+          const body = {
+            testTool: true,
+            note:
+              'これはテスト用ツールです。/* @mcp ... */ 注釈を追加してから `npx mcp build` を実行してください。',
+            inputReceived: { message },
+            howToAnnotate: {
+              template: [
+                '/* @mcp',
+                'name: <tool.name>',
+                'description: <説明（任意）>',
+                'path: <ルーティングキー（省略可）>',
+                'schema:',
+                '  type: object',
+                '  properties:',
+                '    <paramA>: { type: string }',
+                '  required: [<paramA>]',
+                '*/',
+              ].join('\n'),
+              example: '/* @mcp\nname: sheet.appendRow\ndescription: Append one row to a sheet\n...'
+            },
+          };
+
+          const response = {
+            content: [{ type: "text", text: JSON.stringify(body, null, 2) } as const],
+          };
+
+          logger.mcpResponse('echo', response);
+          return response;
         }
-      }, async ({ message }: { message: string }) => {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                testTool: true,
-                note: 'これはテスト用ツールです。/* @mcp ... */ 注釈を追加してから `npx mcp build` を実行してください。',
-                inputReceived: { message },
-                howToAnnotate: {
-                  template: [
-                    '/* @mcp',
-                    'name: <tool.name>',
-                    'description: <説明（任意）>',
-                    'path: <ルーティングキー（省略可）>',
-                    'schema:',
-                    '  type: object',
-                    '  properties:',
-                    '    <paramA>: { type: string }',
-                    '  required: [<paramA>]',
-                    '*/'
-                  ].join('\n'),
-                  example: '/* @mcp\nname: sheet.appendRow\ndescription: Append one row to a sheet\n...'
-                }
-              }, null, 2)
-            }
-          ]
-        };
-      });
-    } else {
-      // Register GAS tool with dynamic schema
-      server.registerTool(tool.name, {
+      );
+      continue;
+    }
+
+    // GAS ツール（JSON Schema → Zod shape 変換）
+    const shape = jsonSchemaToZodShape(tool.schema);
+
+    server.registerTool(
+      tool.name,
+      {
         title: tool.name,
         description: tool.description,
-        inputSchema: z.any().describe('Tool input parameters')
-      }, async (args: unknown) => {
-        if (!config) {
-          throw new Error('GAS configuration not found. Please run "mcp build" first.');
+        inputSchema: shape, // ZodRawShape
+      },
+      async (args: unknown) => {
+        logger.mcpRequest(tool.name, args);
+
+        if (!gasUrl) {
+          const error =
+            'GAS configuration not found. Please run "npx mcp discover" (or create .mcp-gas.json).';
+          logger.mcpError(tool.name, error);
+          throw new Error(error);
         }
 
         try {
-          const result = await callGAS(config.gasUrl, tool.path, args, gasApiToken);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(result, null, 2)
-              }
-            ]
+          const result = await callGAS(gasUrl, tool.path, args, gasApiToken);
+          const response = {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) } as const],
           };
+          logger.mcpResponse(tool.name, response);
+          return response;
         } catch (error) {
+          logger.mcpError(tool.name, error);
+
           if (error instanceof GASClientError) {
-            logger.error(`Tool ${tool.name} failed: ${error.message}` + 
-                        (error.statusCode ? ` (HTTP ${error.statusCode})` : ''));
+            logger.error(
+              `Tool ${tool.name} failed: ${error.message}` +
+                (error.statusCode ? ` (HTTP ${error.statusCode})` : '')
+            );
             throw new Error(`GAS execution failed: ${error.message}`);
           }
-          
+
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           logger.error(`Tool ${tool.name} failed: ${errorMessage}`);
           throw new Error(`Tool execution failed: ${errorMessage}`);
         }
-      });
-    }
+      }
+    );
   }
 
+  logger.debug('Connecting to transport');
   const transport = new StdioServerTransport();
   await server.connect(transport);
   logger.success('MCP Server started successfully');
+  logger.debug('Server is now listening for MCP requests');
 };

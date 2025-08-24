@@ -7,6 +7,9 @@ import { logger } from './logger.js';
 
 const CLASP_CONFIG_FILE = '.clasp.json';
 const CLASP_RC_FILE = '.clasprc.json';
+const DEFAULT_MCP_CONFIG_FILE = '.mcp-gas.json';
+
+// ===== public API =====
 
 /**
  * Reads the script ID from the .clasp.json file in the specified directory.
@@ -70,7 +73,7 @@ export const getWebAppDeployment = async (
 
     // Find the latest active web app deployment
     const webAppDeployments = data.deployments
-      .filter(d => d.entryPoints?.some(e => e.entryPointType === 'WEB_APP'))
+      .filter((d) => d.entryPoints?.some((e) => e.entryPointType === 'WEB_APP'))
       .sort((a, b) => (b.updateTime?.localeCompare(a.updateTime ?? '') ?? 0));
 
     if (webAppDeployments.length === 0) {
@@ -79,7 +82,9 @@ export const getWebAppDeployment = async (
     }
 
     const latestDeployment = webAppDeployments[0];
-    const webAppEntryPoint = latestDeployment.entryPoints?.find(e => e.entryPointType === 'WEB_APP');
+    const webAppEntryPoint = latestDeployment.entryPoints?.find(
+      (e) => e.entryPointType === 'WEB_APP'
+    );
     const deploymentId = latestDeployment.deploymentId;
 
     if (!webAppEntryPoint?.webApp?.url || !deploymentId) {
@@ -125,28 +130,92 @@ export const runClaspDeploy = async (): Promise<void> => {
   }
 };
 
+// ===== .mcp-gas.json schema =====
+
+export type AuthConfig =
+  | {
+      /** Preferred: token placed in GAS Script Properties (long-lived, user-managed). */
+      type: 'scriptPropertiesToken';
+      /** The Script Property key to read on GAS side (e.g., 'MCP_API_TOKEN'). */
+      tokenPropertyKey: string;
+    }
+  | {
+      /** Dev-only fallback: use current local OAuth access token (short-lived). */
+      type: 'oauthAccessToken';
+    };
+
 export interface McpConfig {
   scriptId: string;
   deploymentId: string;
-  gasUrl: string;
-  apiToken: string;
+  /** Preferred naming used by server/tooling */
+  webAppUrl: string;
+  /** Backward compatibility for older code paths */
+  gasUrl?: string;
+  /** Auth config preferred by server */
+  auth: AuthConfig;
+  /**
+   * Optional: include current local OAuth access token (dev only).
+   * This is short-lived and SHOULD NOT be committed.
+   */
+  devOauthToken?: string;
 }
 
 /**
- * Saves the discovered configuration to .mcp-gas.json.
- * @param config The configuration to save.
+ * Saves (or merges) the discovered configuration to .mcp-gas.json.
+ * - Writes both `webAppUrl` and legacy `gasUrl` for compatibility.
+ * - Prefers scriptPropertiesToken; can include dev oauth token if MCP_INCLUDE_OAUTH_TOKEN=1.
  */
-export const saveMcpConfig = async (config: McpConfig): Promise<void> => {
-  const configPath = '.mcp-gas.json';
-  logger.info(`Saving configuration to ${configPath}...`);
+export const saveMcpConfig = async (
+  config: Omit<McpConfig, 'gasUrl' | 'devOauthToken'> & Partial<Pick<McpConfig, 'devOauthToken'>>,
+  filePath: string = DEFAULT_MCP_CONFIG_FILE
+): Promise<void> => {
+  logger.info(`Saving configuration to ${filePath}...`);
   try {
-    const jsonContent = JSON.stringify(config, null, 2);
-    await fs.writeFile(configPath, jsonContent, 'utf-8');
-    logger.success(`Configuration saved successfully to ${configPath}.`);
+    // Merge with existing file if present (non-destructive)
+    let existing: Partial<McpConfig> = {};
+    try {
+      const current = await fs.readFile(filePath, 'utf-8');
+      existing = JSON.parse(current);
+    } catch (e: any) {
+      if (e?.code !== 'ENOENT') {
+        logger.warn(`Existing ${filePath} could not be parsed. Overwriting.`);
+      }
+    }
+
+    const merged: McpConfig = {
+      scriptId: config.scriptId,
+      deploymentId: config.deploymentId,
+      webAppUrl: config.webAppUrl,
+      // keep legacy key for older clients
+      gasUrl: config.webAppUrl,
+      auth: config.auth,
+      // dev oauth token is optional and excluded unless provided
+      ...(config.devOauthToken ? { devOauthToken: config.devOauthToken } : {}),
+      // preserve unknown future fields from existing (best-effort)
+      ...(existing && typeof existing === 'object' ? existing : {}),
+    };
+
+    // Ensure critical fields are from 'config' (override any existing)
+    merged.scriptId = config.scriptId;
+    merged.deploymentId = config.deploymentId;
+    merged.webAppUrl = config.webAppUrl;
+    merged.gasUrl = config.webAppUrl;
+    merged.auth = config.auth;
+
+    const jsonContent = JSON.stringify(merged, null, 2);
+    await fs.writeFile(filePath, jsonContent, 'utf-8');
+    logger.success(`Configuration saved successfully to ${filePath}.`);
+
+    // Safety: if we wrote a dev oauth token, suggest .gitignore
+    if (merged.devOauthToken) {
+      await ensureGitignoreHasEntry('.mcp-gas.json');
+    }
   } catch (error: any) {
-    throw new Error(`Failed to save configuration to ${configPath}: ${error.message}`);
+    throw new Error(`Failed to save configuration to ${filePath}: ${error.message}`);
   }
 };
+
+// ===== credentials =====
 
 /**
  * Reads the clasp credentials from the ~/.clasprc.json file.
@@ -170,10 +239,60 @@ export const getClaspCredentials = async (): Promise<{ accessToken: string }> =>
     }
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      throw new Error(
-        `Could not find ${CLASP_RC_FILE} in your home directory. Please run 'clasp login'.`
-      );
+      throw new Error(`Could not find ${CLASP_RC_FILE} in your home directory. Please run 'clasp login'.`);
     }
     throw new Error(`Failed to read or parse ${configPath}: ${error.message}`);
+  }
+};
+
+// ===== helpers =====
+
+/**
+ * Compose and persist .mcp-gas.json in one go.
+ * Preferred auth is Script Properties token. If MCP_INCLUDE_OAUTH_TOKEN=1, dev token is embedded.
+ */
+export const composeAndSaveMcpConfig = async (opts: {
+  scriptId: string;
+  deployment: WebAppDeployment;
+  accessToken: string;
+  filePath?: string;
+  tokenPropertyKey?: string; // defaults to 'MCP_API_TOKEN'
+}) => {
+  const tokenPropertyKey = opts.tokenPropertyKey ?? 'MCP_API_TOKEN';
+  const includeDevToken = process.env.MCP_INCLUDE_OAUTH_TOKEN === '1';
+
+  const cfg: Omit<McpConfig, 'gasUrl' | 'devOauthToken'> & Partial<Pick<McpConfig, 'devOauthToken'>> = {
+    scriptId: opts.scriptId,
+    deploymentId: opts.deployment.deploymentId,
+    webAppUrl: opts.deployment.url,
+    auth: { type: 'scriptPropertiesToken', tokenPropertyKey },
+    ...(includeDevToken ? { devOauthToken: opts.accessToken } : {}),
+  };
+
+  await saveMcpConfig(cfg, opts.filePath ?? DEFAULT_MCP_CONFIG_FILE);
+
+  // ユーザー向けヒント
+  logger.info(
+    `Auth mode set to 'scriptPropertiesToken'. Please set the Script Property '${tokenPropertyKey}' on your GAS project.`
+  );
+  if (includeDevToken) {
+    logger.warn(
+      `Dev OAuth token embedded for convenience. It is short-lived. Do NOT commit ${DEFAULT_MCP_CONFIG_FILE}.`
+    );
+  }
+};
+
+/** Ensure .gitignore contains the given entry (best-effort). */
+const ensureGitignoreHasEntry = async (entry: string) => {
+  const giPath = path.resolve('.gitignore');
+  try {
+    const current = await fs.readFile(giPath, 'utf-8').catch(() => '');
+    if (!current.split(/\r?\n/).some((line) => line.trim() === entry)) {
+      const next = current.endsWith('\n') || current.length === 0 ? current + entry + '\n' : current + '\n' + entry + '\n';
+      await fs.writeFile(giPath, next, 'utf-8');
+      logger.info(`Added '${entry}' to .gitignore`);
+    }
+  } catch {
+    // ignore
   }
 };
